@@ -263,3 +263,9 @@ Entorno local nuevo en espacio de usuario: Python 3.14.8, Bench 5.29.1, MariaDB 
 - Lint y formato Python/JS/HTML y guard de publicación revisados junto con el commit. La revisión de implementación se hizo en esta sesión; no se presenta como revisión independiente.
 
 Límites: no se verificó finalización de recálculos sobre ventas posteriores, no se certificó un nuevo restore de LCV ni hardware; conserva el preset confirmado. No se ejecutó la suite completa upstream ni se certifica compatibilidad universal. DIAN continúa desactivada; no hubo transmisión fiscal. La clave impide duplicar un intento, no identifica dos intentos nuevos del mismo flete físico. El cliente conserva el contenido del intento en su almacenamiento local hasta resolverlo y requiere el mismo usuario/sitio.
+
+## P0 · Superficie nativa de cajeros (#3) · 22/10/2026
+
+Se restringen para `OMP Cashier` Item (marca sin dueño o concedida), Customer (solo cliente de mostrador del perfil accesible, solo lectura), Bin (almacén de marca concedida) y se deniegan Sales Order, Quotation y Delivery Note. Los ejecutores genéricos de reportes y exportaciones devuelven 403 a cajeros. Las descargas de adjuntos de Item/Customer siguen el permiso del documento. Detalle en [xpos-api-security.md](xpos-api-security.md).
+
+Validación: 64 pruebas Python, Ruff y formato. Bench desechable local con los SHAs fijados (MariaDB 11.8.6, Redis 8.0.5, Python 3.14): 9 pruebas Bench, 21 HTTP de seguridad X POS, 20 de caja nativa, 19 administrativas, 11 de devoluciones y 11 de importación, sin fallos. Sin los hooks y el bloqueo, solo la prueba nueva falla. No se ejecutaron los recorridos de navegador; CI del PR repite la instalación nueva. Pendiente: metadatos de File, Address/Contact, Price List, otros reportes. No se certifica aislamiento completo.
