@@ -254,5 +254,4 @@ Límites: productos simples de stock en Nos; series, lotes, variantes, paquetes,
 
 Se restringen para `OMP Cashier` Item (marca sin dueño o concedida), Customer (solo cliente de mostrador del perfil accesible, solo lectura), Bin (almacén de marca concedida) y se deniegan Sales Order, Quotation y Delivery Note. Los ejecutores genéricos de reportes y exportaciones devuelven 403 a cajeros. Las descargas de adjuntos de Item/Customer siguen el permiso del documento. Detalle en [xpos-api-security.md](xpos-api-security.md).
 
-Validación local: Python, Ruff y compilación del script. La prueba HTTP nueva (`xpos_http_security_tests` pasa a 21) no se ejecutó en Bench local; la validación depende de CI. Pendiente: metadatos de File, Address/Contact, Price List, otros reportes. No se certifica aislamiento completo.
-
+Validación: 64 pruebas Python, Ruff y formato. Bench desechable local con los SHAs fijados (MariaDB 11.8.6, Redis 8.0.5, Python 3.14): 9 pruebas Bench, 21 HTTP de seguridad X POS, 20 de caja nativa, 19 administrativas, 11 de devoluciones y 11 de importación, sin fallos. Sin los hooks y el bloqueo, solo la prueba nueva falla. No se ejecutaron los recorridos de navegador; CI del PR repite la instalación nueva. Pendiente: metadatos de File, Address/Contact, Price List, otros reportes. No se certifica aislamiento completo.
