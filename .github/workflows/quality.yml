@@ -121,7 +121,7 @@ jobs:
           PY
           env/bin/python "$GITHUB_WORKSPACE/scripts/test-restore-drill.py" --bench "$RUNNER_TEMP/omp-bench" --db-admin-file "$RUNNER_TEMP/omp-drill-admin.json"
           rm "$RUNNER_TEMP/omp-drill-admin.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: native-cashier-browser-results
@@ -155,7 +155,7 @@ jobs:
           for attempt in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:8765/api/context && break || sleep 1; done
           npm run test:ui
           python scripts/check-receipt-pdfs.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: demo-browser-results
