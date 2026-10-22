@@ -50,3 +50,7 @@ Ver [respaldo y restauración](recovery.md) y [revisión de APIs](upstream-api-r
 - #21: garantías y servicio; #22: costos de importación y distribución de costos.
 - #37 y #38: versiones Windows portátil e instalable y configuración inicial guiada, reanudable y en español. Se construirán cuando la base funcional esté lista, con instalaciones limpias sin datos, claves ni respaldos privados. La propuesta documental #39 permanece en revisión separada.
 - #6: operación sin conexión, con su propia conciliación.
+
+### Primera entrega de #22: distribución de costos
+
+Sección guiada Costos de compra con LCV nativo, moneda original ligada a la cuenta, tasa explícita, distribución y vista previa por artículo, estimación en borrador y recuperación por clave única. [Guía y límites](landed-costs.md). Es un avance parcial del #22: conciliación de recálculos de valoración y márgenes permanecen pendientes; no cerrar el issue completo con este incremento.
