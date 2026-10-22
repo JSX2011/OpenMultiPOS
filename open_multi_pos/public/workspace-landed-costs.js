@@ -40,6 +40,8 @@ window.OMPLandedCosts = (() => {
     $("cost-refresh").hidden = !journal || !!current;
     $("cost-refresh").disabled = W.state.busy;
     $("cost-retry").hidden = !journal || !!current;
+    $("cost-abandon").hidden = !journal || !!current;
+    $("cost-abandon").disabled = W.state.busy || !journal;
     $("cost-retry").disabled = $("cost-status").disabled =
       W.state.busy || !journal;
     $("cost-submit-draft").hidden = current?.status !== "draft";
@@ -90,20 +92,33 @@ window.OMPLandedCosts = (() => {
   }
   function accept(value) {
     if (value.status === "not_found") {
+      current = null;
+      preview = null;
+      $("cost-review").hidden = true;
+      $("cost-native").hidden = true;
+      $("cost-state").textContent =
+        "Intento pendiente de resolver en el servidor.";
       notice(
-        "Aún no aparece el comprobante. Actualiza la vista previa del mismo intento, revisa y confirma antes de reintentar; conserva esta clave.",
+        "Aún no aparece el comprobante. Actualiza la vista previa y reintenta con la misma clave, o abandona el intento en el servidor antes de preparar otro.",
       );
       return;
     }
     current = value;
-    if (value.status === "cancelled") {
+    if (value.status === "cancelled" || value.status === "abandoned") {
       preview = null;
       $("cost-review").hidden = true;
+      $("cost-native").hidden = true;
       $("cost-state").textContent =
-        "El comprobante " +
-        value.voucher +
-        " fue cancelado en ERPNext. Este intento no se recreará. Puedes preparar otra distribución después de revisar la cancelación.";
-      notice("Cancelación confirmada en el servidor.");
+        value.status === "abandoned"
+          ? "Intento abandonado en el servidor. Las solicitudes tardías con esta clave quedan bloqueadas. Puedes preparar otra distribución."
+          : "El comprobante " +
+            value.voucher +
+            " fue cancelado en ERPNext. Este intento no se recreará. Puedes preparar otra distribución después de revisar la cancelación.";
+      notice(
+        value.status === "abandoned"
+          ? "Abandono confirmado en el servidor."
+          : "Cancelación confirmada en el servidor.",
+      );
       return;
     }
     draw(value);
@@ -273,6 +288,18 @@ window.OMPLandedCosts = (() => {
   $("cost-send").onclick = () => run(() => save(1));
   $("cost-status").onclick = () => run(() => locked(checkStatus));
   $("cost-retry").onclick = () => run(() => locked(send));
+  $("cost-abandon").onclick = () =>
+    run(() =>
+      locked(async () => {
+        accept(
+          await api(
+            "landed_costs.abandon",
+            { brand: journal.data.brand, request_id: journal.request_id },
+            true,
+          ),
+        );
+      }),
+    );
   $("cost-submit-draft").onclick = () =>
     run(() =>
       locked(async () => {

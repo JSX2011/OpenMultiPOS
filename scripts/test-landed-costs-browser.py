@@ -24,6 +24,7 @@ spec.loader.exec_module(landed)
 class LandedCostsBrowser(landed.LandedCostsHTTP):
     def test_browser(self):
         doc = self.purchase()
+        rejected = self.purchase()
         account = self.data(doc)["charges"][0]["account"]
         old = frappe.db.sql(
             "SELECT password, encrypted FROM __Auth WHERE doctype='User' AND name=%s AND fieldname='password'",
@@ -46,6 +47,7 @@ class LandedCostsBrowser(landed.LandedCostsHTTP):
                         "password": password,
                         "brand": self.businesses[0]["brand"],
                         "receipt": doc.name,
+                        "pending_receipt": rejected.name,
                         "account": account,
                     }
                 ),

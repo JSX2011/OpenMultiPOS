@@ -268,7 +268,7 @@
       },
       {
         "title": "Recupera y ajusta",
-        "body": "Si se pierde la respuesta, consulta estado o reintenta la misma operación. Para ajustar una estimación, abre el comprobante en ERPNext, guarda allí, consulta el estado y revisa antes de enviar la estimación.",
+        "body": "Si se pierde la respuesta, consulta estado o reintenta la misma operación. Si el intento ya no es válido, usa Abandonar intento pendiente: el servidor recupera un comprobante existente o bloquea envíos tardíos antes de permitir otro intento. Si se pierde esa respuesta, recarga y consulta el estado. Para ajustar una estimación, abre el comprobante en ERPNext, guarda allí, consulta el estado y revisa antes de enviar la estimación.",
         "target": "#cost-status"
       }
     ],

@@ -14,6 +14,7 @@ from open_multi_pos.landed_cost_contract import selection
 from open_multi_pos.workspace import brand_context
 
 DOCTYPE = "Landed Cost Voucher"
+TOMBSTONE = "OMP Landed Cost Tombstone"
 _submitting = ContextVar("omp_landed_cost_submit", default=False)
 
 
@@ -183,12 +184,25 @@ def operation_key(request_id):
     return wire.digest(["landed_cost", frappe.session.user, wire.request_uuid(request_id)])
 
 
+def abandoned(ctx, key):
+    record = frappe.db.get_value(TOMBSTONE, key, ["actor", "brand"], as_dict=True, for_update=True)
+    if record and (record.actor != frappe.session.user or record.brand != ctx["brand"]):
+        frappe.throw("Intento de otro negocio o usuario", frappe.PermissionError)
+    return bool(record)
+
+
 def saved(ctx, name, *, allow_cancelled=False):
     doc = frappe.get_doc(DOCTYPE, name, for_update=True)
     doc.check_permission("read")
     if doc.omp_business_brand != ctx["brand"] or doc.omp_actor != frappe.session.user:
         frappe.throw("Operación de otro negocio o usuario", frappe.PermissionError)
-    if doc.company != ctx["company"] or doc.vendor_invoices:
+    if doc.company != ctx["company"]:
+        frappe.throw("Comprobante de otra empresa", frappe.PermissionError)
+    if doc.docstatus == 2:
+        if not allow_cancelled:
+            native.conflict("El comprobante fue cancelado; no se recreará al reintentar")
+        return doc, []
+    if doc.vendor_invoices:
         raise ValueError("Revise empresa y facturas de servicios en el formulario nativo")
     refs = [
         {"doctype": r.receipt_document_type, "name": r.receipt_document}
@@ -197,8 +211,6 @@ def saved(ctx, name, *, allow_cancelled=False):
     if any(r["doctype"] not in ("Purchase Receipt", "Purchase Invoice") for r in refs):
         raise ValueError("Tipo de recepción no admitido")
     docs = sources(ctx, sorted(refs, key=lambda r: (r["doctype"], r["name"])))
-    if doc.docstatus == 2 and not allow_cancelled:
-        native.conflict("El comprobante fue cancelado; no se recreará al reintentar")
     return doc, docs
 
 
@@ -257,6 +269,8 @@ def save(data, request_id, plan_hash, submit=0):
         raise ValueError("Acción inválida")
     ctx = context(data["brand"])
     key = operation_key(request_id)
+    if abandoned(ctx, key):
+        native.conflict("El intento fue abandonado; prepare una nueva distribución")
     # Current locking read, including after waiting for a concurrent request.
     names = frappe.db.sql(
         f"SELECT name FROM `tab{DOCTYPE}` WHERE omp_operation_key=%s FOR UPDATE", key
@@ -286,14 +300,35 @@ def save(data, request_id, plan_hash, submit=0):
 @native.contract_errors
 def status(brand, request_id):
     ctx = context(wire.identifier(brand))
+    key = operation_key(request_id)
+    if abandoned(ctx, key):
+        return {"status": "abandoned"}
     rows = frappe.db.sql(
         f"SELECT name FROM `tab{DOCTYPE}` WHERE omp_operation_key=%s FOR UPDATE",
-        operation_key(request_id),
+        key,
     )
     if not rows:
         return {"status": "not_found"}
     doc, docs = saved(ctx, rows[0][0], allow_cancelled=True)
     return result(ctx, doc, docs)
+
+
+@frappe.whitelist(methods=["POST"])
+@native.contract_errors
+def abandon(brand, request_id):
+    ctx = context(wire.identifier(brand))
+    key = operation_key(request_id)
+    if abandoned(ctx, key):
+        return {"status": "abandoned"}
+    rows = frappe.db.sql(
+        f"SELECT name FROM `tab{DOCTYPE}` WHERE omp_operation_key=%s FOR UPDATE", key
+    )
+    if rows:
+        doc, docs = saved(ctx, rows[0][0], allow_cancelled=True)
+        return result(ctx, doc, docs)
+    # The shared profile/brand locks fence a save already in flight before this marker.
+    native.journal(TOMBSTONE, key, {"actor": frappe.session.user, "brand": ctx["brand"]})
+    return {"status": "abandoned"}
 
 
 @frappe.whitelist(methods=["POST"])

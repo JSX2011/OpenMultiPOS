@@ -39,7 +39,11 @@ const input = JSON.parse(fs.readFileSync(0, "utf8"));
       await W.run(() => window.OMPLandedCosts.enter());
     }, input.brand);
     await ready();
-    await page.locator("#cost-receipts input").check();
+    await page
+      .locator("#cost-receipts label")
+      .filter({ hasText: input.receipt })
+      .locator("input")
+      .check();
     await page.locator("#cost-charges select").selectOption(input.account);
     await page.locator("#cost-charges input").nth(0).fill("Flete ficticio");
     await page.locator("#cost-charges input").nth(1).fill("500.00");
@@ -119,6 +123,78 @@ const input = JSON.parse(fs.readFileSync(0, "utf8"));
       path: path.join(out, "mobile.png"),
       fullPage: true,
     });
+    await page.locator("#cost-new").click();
+    await ready();
+    await page
+      .locator("#cost-receipts label")
+      .filter({ hasText: input.pending_receipt })
+      .locator("input")
+      .check();
+    await page.locator("#cost-charges select").selectOption(input.account);
+    await page
+      .locator("#cost-charges input")
+      .nth(0)
+      .fill("Flete ficticio pendiente");
+    await page.locator("#cost-charges input").nth(1).fill("500.00");
+    await page.locator("#cost-charges input").nth(2).fill("1");
+    await page.locator("#cost-preview").click();
+    await ready();
+    await page.locator("#cost-confirm").check();
+    await page.route(
+      "**/api/method/open_multi_pos.landed_costs.save",
+      (route) => route.abort("failed"),
+      { times: 1 },
+    );
+    await page.locator("#cost-send").click();
+    await ready();
+    await page.reload();
+    await ready();
+    assert.equal(await page.locator("#cost-new").isDisabled(), true);
+    assert.equal(await page.locator("#cost-abandon").isVisible(), true);
+    const pending = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key)),
+      journal[0],
+    );
+    assert.notEqual(pending.request_id, JSON.parse(journal[1]).request_id);
+    const pendingAxe = await new AxeBuilder({ page })
+      .include("#view-costs")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+      .analyze();
+    assert.deepEqual(pendingAxe.violations, []);
+    // The server commits abandonment, but its response is lost before the browser sees it.
+    await page.route(
+      "**/api/method/open_multi_pos.landed_costs.abandon",
+      async (route) => {
+        const response = await route.fetch();
+        assert.equal(response.status(), 200);
+        await route.abort("failed");
+      },
+      { times: 1 },
+    );
+    await page.locator("#cost-abandon").focus();
+    await page.keyboard.press("Enter");
+    await ready();
+    assert.equal(
+      await page.evaluate(
+        (key) => JSON.parse(localStorage.getItem(key)).request_id,
+        journal[0],
+      ),
+      pending.request_id,
+    );
+    await page.reload();
+    await ready();
+    assert.match(
+      await page.locator("#cost-state").textContent(),
+      /Intento abandonado en el servidor/,
+    );
+    assert.equal(await page.locator("#cost-new").isEnabled(), true);
+    await page.locator("#cost-new").click();
+    await ready();
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), journal[0]),
+      null,
+    );
+    assert.equal(await page.locator("#cost-inputs").isVisible(), true);
     assert.deepEqual(errors, []);
     console.log(
       JSON.stringify({
@@ -127,6 +203,7 @@ const input = JSON.parse(fs.readFileSync(0, "utf8"));
         keyboard: true,
         recovery: true,
         draftSubmitted: true,
+        abandonmentRecovered: true,
         axeViolations: axe.violations.length,
       }),
     );

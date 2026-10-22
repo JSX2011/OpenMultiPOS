@@ -338,6 +338,14 @@ class LandedCostsHTTP(fixtures.WorkspaceHTTP):
                 ).status_code,
                 403,
             )
+            self.assertEqual(
+                self.request(
+                    "landed_costs.abandon",
+                    {"brand": data["brand"], "request_id": args["request_id"]},
+                    post=True,
+                ).status_code,
+                403,
+            )
         finally:
             frappe.db.rollback()
             user = frappe.get_doc("User", self.user)
@@ -390,6 +398,83 @@ class LandedCostsHTTP(fixtures.WorkspaceHTTP):
         frappe.db.rollback()
         updated = frappe.get_doc("Purchase Receipt", doc.name)
         self.assertEqual(Decimal(str(updated.items[0].valuation_rate)), Decimal(row["after"]))
+
+    def test_10_rejected_purchase_can_be_abandoned_and_delayed_save_is_fenced(self):
+        doc = self.purchase()
+        args, _ = self.prepared(self.data(doc))
+        doc.cancel()
+        frappe.db.commit()
+        before = frappe.db.count("Landed Cost Voucher")
+        self.assertNotEqual(self.request("landed_costs.save", args, post=True).status_code, 200)
+        lookup = {"brand": args["data"]["brand"], "request_id": args["request_id"]}
+        self.assertEqual(
+            self.result("landed_costs.status", lookup, post=True)["status"], "not_found"
+        )
+        self.assertIn(
+            self.request("landed_costs.abandon", lookup, post=True, guest=True).status_code,
+            (401, 403),
+        )
+        for _ in range(2):
+            self.assertEqual(
+                self.result("landed_costs.abandon", lookup, post=True), {"status": "abandoned"}
+            )
+        self.assertEqual(
+            self.result("landed_costs.status", lookup, post=True)["status"], "abandoned"
+        )
+        self.assertEqual(self.request("landed_costs.save", args, post=True).status_code, 409)
+        for method in ("status", "abandon"):
+            self.assertEqual(
+                self.request(
+                    "landed_costs." + method,
+                    {**lookup, "brand": self.businesses[2]["brand"]},
+                    post=True,
+                ).status_code,
+                403,
+            )
+        frappe.db.rollback()
+        self.assertEqual(frappe.db.count("Landed Cost Voucher"), before)
+        fresh, _ = self.prepared(self.data(self.purchase()))
+        self.assertEqual(self.result("landed_costs.save", fresh, post=True)["status"], "submitted")
+
+    def test_11_abandon_and_save_serialize_without_duplicate_vouchers(self):
+        args, _ = self.prepared(self.data(self.purchase()))
+        lookup = {"brand": args["data"]["brand"], "request_id": args["request_id"]}
+        frappe.db.rollback()
+        before = frappe.db.count("Landed Cost Voucher")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            calls = [
+                pool.submit(self.request, "landed_costs.save", args, post=True),
+                pool.submit(self.request, "landed_costs.abandon", lookup, post=True),
+            ]
+            responses = [call.result() for call in calls]
+        self.assertTrue(all(r.status_code in (200, 409) for r in responses))
+        state = self.result("landed_costs.status", lookup, post=True)
+        self.assertIn(state["status"], ("submitted", "abandoned"))
+        self.assertEqual(self.result("landed_costs.abandon", lookup, post=True), state)
+        if state["status"] == "abandoned":
+            self.assertEqual(self.request("landed_costs.save", args, post=True).status_code, 409)
+        else:
+            self.assertEqual(self.result("landed_costs.save", args, post=True), state)
+        frappe.db.rollback()
+        self.assertEqual(
+            frappe.db.count("Landed Cost Voucher"), before + (state["status"] == "submitted")
+        )
+
+    def test_12_resolve_existing_voucher_and_cancelled_source(self):
+        source = self.purchase()
+        args, _ = self.prepared(self.data(source))
+        result = self.result("landed_costs.save", args, post=True)
+        lookup = {"brand": args["data"]["brand"], "request_id": args["request_id"]}
+        self.assertEqual(self.result("landed_costs.abandon", lookup, post=True), result)
+        frappe.db.rollback()
+        frappe.get_doc("Landed Cost Voucher", result["voucher"]).cancel()
+        frappe.db.commit()
+        frappe.get_doc(source.doctype, source.name).cancel()
+        frappe.db.commit()
+        cancelled = {"status": "cancelled", "voucher": result["voucher"]}
+        self.assertEqual(self.result("landed_costs.status", lookup, post=True), cancelled)
+        self.assertEqual(self.result("landed_costs.abandon", lookup, post=True), cancelled)
+        self.assertEqual(self.request("landed_costs.save", args, post=True).status_code, 409)
 
 
 if __name__ == "__main__":
